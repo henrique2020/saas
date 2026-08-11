@@ -115,7 +115,6 @@ export async function syncDividends(): Promise<void> {
 }
 
 export function startDividendSyncCron() {
-  return 1;
   cron.schedule(
     DIVIDEND_SYNC_CRON,
     () => {

@@ -85,7 +85,6 @@ export async function syncDailyPrices(): Promise<void> {
 }
 
 export function startPriceSyncCron() {
-  return 1;
   cron.schedule(
     PRICE_SYNC_CRON,
     () => {
