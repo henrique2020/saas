@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Pencil, Trash2, X } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -40,8 +41,33 @@ export default function AdminDividends() {
       navigate('/');
       return;
     }
-    loadData();
-  }, [user]);
+    let isMounted = true;
+    api.get('/dividends/stock-dividends')
+      .then((res) => {
+        if (isMounted) {
+          setDividends(res.data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error('Erro ao carregar dividendos:', err);
+          setLoading(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [user, navigate]);
+
+  const formatDate = (dateStr: string) => {
+    const parts = dateStr.split('T')[0].split('-');
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).toLocaleDateString('pt-BR');
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  };
 
   const loadData = async () => {
     try {
@@ -54,20 +80,11 @@ export default function AdminDividends() {
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    const parts = dateStr.split('T')[0].split('-');
-    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).toLocaleDateString('pt-BR');
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-  };
-
   const openEdit = (div: StockDividend) => {
     setEditDiv(div);
-    setEditAmount(String(div.amountPerShare));
-    setEditComDate(div.comDate.split('T')[0]);
-    setEditPaymentDate(div.paymentDate.split('T')[0]);
+    setEditAmount(div.amountPerShare);
+    setEditComDate(div.comDate ? div.comDate.split('T')[0] : '');
+    setEditPaymentDate(div.paymentDate ? div.paymentDate.split('T')[0] : '');
     setEditType(div.type);
   };
 
@@ -84,20 +101,28 @@ export default function AdminDividends() {
       });
       setEditDiv(null);
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao editar');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao editar';
+      alert(message);
     } finally {
       setEditLoading(false);
     }
   };
+
+
 
   const handleDelete = async (id: string) => {
     if (!confirm('Deseja excluir este dividendo automático?')) return;
     try {
       await api.delete(`/dividends/stock-dividends/${id}`);
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao excluir');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao excluir';
+      alert(message);
     }
   };
 

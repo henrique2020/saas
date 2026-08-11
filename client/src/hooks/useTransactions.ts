@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import api from '../services/api';
 import type { Transaction } from '../types';
 
@@ -9,22 +10,43 @@ export function useTransactions(stockId?: number) {
 
   const fetchTransactions = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
       const url = stockId ? `/transactions?stockId=${stockId}` : '/transactions';
       const response = await api.get<Transaction[]>(url);
       setTransactions(response.data);
-    } catch (err: any) {
+      setError(null);
+    } catch (err: unknown) {
       console.error('Error fetching transactions:', err);
-      setError(err.response?.data?.error || 'Erro ao carregar movimentações');
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao carregar movimentações';
+      setError(message);
     } finally {
       setLoading(false);
     }
   }, [stockId]);
 
   useEffect(() => {
-    fetchTransactions();
-  }, [fetchTransactions]);
+    let isMounted = true;
+    const url = stockId ? `/transactions?stockId=${stockId}` : '/transactions';
+    api.get<Transaction[]>(url)
+      .then((res) => {
+        if (isMounted) {
+          setTransactions(res.data);
+          setError(null);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (isMounted) {
+          const message = axios.isAxiosError(err) && err.response?.data?.error
+            ? (err.response.data.error as string)
+            : 'Erro ao carregar movimentações';
+          setError(message);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
+  }, [stockId]);
 
   const deleteTransaction = async (id: string) => {
     await api.delete(`/transactions/${id}`);

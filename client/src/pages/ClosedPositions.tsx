@@ -20,19 +20,22 @@ export default function ClosedPositions() {
 
   useEffect(() => {
     document.title = 'Posições Fechadas';
-    loadData();
+    let isMounted = true;
+    api.get('/dashboard/closed-positions')
+      .then((res) => {
+        if (isMounted) {
+          setPositions(res.data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error('Error loading closed positions:', err);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
   }, []);
-
-  const loadData = async () => {
-    try {
-      const res = await api.get('/dashboard/closed-positions');
-      setPositions(res.data);
-    } catch (error) {
-      console.error('Error loading closed positions:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);

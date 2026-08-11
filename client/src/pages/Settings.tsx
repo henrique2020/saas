@@ -3,6 +3,8 @@ import { Save, Lock } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
+import axios from 'axios';
+
 export default function Settings() {
   const { user } = useAuth();
   const [name, setName] = useState(user?.name || '');
@@ -26,8 +28,11 @@ export default function Settings() {
     try {
       await api.put('/auth/profile', { name, email });
       setProfileMsg('Perfil atualizado com sucesso');
-    } catch (err: any) {
-      setProfileError(err.response?.data?.error || 'Erro ao atualizar perfil');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao atualizar perfil';
+      setProfileError(message);
     } finally {
       setProfileLoading(false);
     }
@@ -51,8 +56,11 @@ export default function Settings() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch (err: any) {
-      setPasswordError(err.response?.data?.error || 'Erro ao alterar senha');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao alterar senha';
+      setPasswordError(message);
     } finally {
       setPasswordLoading(false);
     }

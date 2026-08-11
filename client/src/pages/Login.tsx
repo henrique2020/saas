@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 
+import axios from 'axios';
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,8 +21,11 @@ export default function Login() {
     try {
       await login(email, password);
       navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao fazer login');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao fazer login';
+      setError(message);
     } finally {
       setLoading(false);
     }

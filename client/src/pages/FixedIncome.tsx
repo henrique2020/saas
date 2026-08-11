@@ -1,24 +1,34 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
 import type { FormEvent } from 'react';
 import { Landmark, Plus, X, Trash2, Pencil, CheckCircle2, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
-import type { FixedIncome, FixedIncomeSummary, FixedIncomeYieldType, CurrentRate } from '../types';
+import type { FixedIncome, FixedIncomeSummary, FixedIncomeType, YieldType, CurrentRate } from '../types';
 
-const INVESTMENT_TYPES = ['CDB', 'LCI', 'LCA', 'LC', 'TESOURO', 'DEBENTURE', 'CRI', 'CRA', 'OUTRO'];
+const INVESTMENT_TYPES: { value: FixedIncomeType; label: string }[] = [
+  { value: 'CDB', label: 'CDB' },
+  { value: 'LCI', label: 'LCI' },
+  { value: 'LCA', label: 'LCA' },
+  { value: 'TESOURO_DIRETO', label: 'Tesouro Direto' },
+  { value: 'DEBENTURE', label: 'Debênture' },
+  { value: 'CRI', label: 'CRI' },
+  { value: 'CRA', label: 'CRA' },
+  { value: 'OUTROS', label: 'Outros' },
+];
 
-const YIELD_TYPES: { value: FixedIncomeYieldType; label: string; hint: string }[] = [
-  { value: 'PRE', label: 'Prefixado', hint: 'Taxa fixa ao ano (ex.: 11,5 = 11,5% a.a.)' },
-  { value: 'CDI', label: '% do CDI', hint: 'Percentual do CDI (ex.: 110 = 110% do CDI)' },
-  { value: 'SELIC', label: 'Selic + spread', hint: 'Spread somado à Selic (ex.: 0,5 = Selic + 0,5%)' },
-  { value: 'IPCA', label: 'IPCA + spread', hint: 'Spread somado ao IPCA (ex.: 6 = IPCA + 6%)' },
+const YIELD_TYPES: { value: YieldType; label: string; placeholder: string; unit: string; hint: string }[] = [
+  { value: 'PRE', label: 'Prefixado', placeholder: 'Ex: 12.5 (12,5% a.a.)', unit: '% a.a.', hint: 'Taxa fixa anual' },
+  { value: 'CDI', label: '% do CDI', placeholder: 'Ex: 110 (110% do CDI)', unit: '% do CDI', hint: 'Percentual do CDI' },
+  { value: 'SELIC', label: 'Selic + Spread', placeholder: 'Ex: 0.5 (Selic + 0,5% a.a.)', unit: '% spread a.a.', hint: 'Selic + taxa fixa' },
+  { value: 'IPCA', label: 'IPCA + Spread', placeholder: 'Ex: 6.0 (IPCA + 6,0% a.a.)', unit: '% spread a.a.', hint: 'IPCA + taxa fixa' },
 ];
 
 const emptyForm = {
   name: '',
-  investmentType: 'CDB',
-  yieldType: 'CDI' as FixedIncomeYieldType,
+  investmentType: 'CDB' as FixedIncomeType,
+  yieldType: 'PRE' as YieldType,
   rate: '',
-  investedAmount: '',
+  amount: '',
   purchaseDate: new Date().toISOString().split('T')[0],
   maturityDate: '',
   taxExempt: false,
@@ -46,28 +56,29 @@ export default function FixedIncomePage() {
   const [settleItem, setSettleItem] = useState<FixedIncome | null>(null);
   const [settleAmount, setSettleAmount] = useState('');
   const [settleDate, setSettleDate] = useState('');
-  const [settleError, setSettleError] = useState('');
   const [settleLoading, setSettleLoading] = useState(false);
+  const [settleError, setSettleError] = useState('');
 
-  // Aportes e Agrupamentos
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [expandedSettledGroups, setExpandedSettledGroups] = useState<Record<string, boolean>>({});
   const [contribTarget, setContribTarget] = useState<FixedIncome | null>(null);
   const [contribEditingId, setContribEditingId] = useState<string | null>(null);
   const [contribForm, setContribForm] = useState({ ...emptyContributionForm });
-  const [contribError, setContribError] = useState('');
   const [contribLoading, setContribLoading] = useState(false);
+  const [contribError, setContribError] = useState('');
 
   const formRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (showForm) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [showForm, editingId]);
+  const selectedYield = YIELD_TYPES.find((y) => y.value === form.yieldType);
+  const missingRate = (form.yieldType === 'CDI' && !currentRates['CDI']) || (form.yieldType === 'SELIC' && !currentRates['SELIC']) || (form.yieldType === 'IPCA' && !currentRates['IPCA']);
 
-  useEffect(() => {
-    document.title = 'Renda Fixa';
-    loadData();
-  }, []);
+  const yieldLabel = (item: FixedIncome) => {
+    if (item.yieldType === 'PRE') return `${item.rate}% a.a.`;
+    if (item.yieldType === 'CDI') return `${item.rate}% do CDI`;
+    if (item.yieldType === 'SELIC') return `Selic + ${item.rate}% a.a.`;
+    if (item.yieldType === 'IPCA') return `IPCA + ${item.rate}% a.a.`;
+    return `${item.rate}%`;
+  };
 
   const loadData = async () => {
     try {
@@ -85,27 +96,40 @@ export default function FixedIncomePage() {
     }
   };
 
+  useEffect(() => {
+    if (showForm) formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [showForm, editingId]);
+
+  useEffect(() => {
+    document.title = 'Renda Fixa';
+    let isMounted = true;
+    Promise.all([
+      api.get('/fixed-income'),
+      api.get('/rates/current'),
+    ])
+      .then(([listRes, ratesRes]) => {
+        if (isMounted) {
+          setItems(listRes.data.items || []);
+          setSummary(listRes.data.summary || null);
+          setCurrentRates(ratesRes.data || {});
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (isMounted) {
+          console.error('Error loading fixed income:', error);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
+  }, []);
+
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
   const formatDate = (dateStr: string) => {
     const parts = dateStr.split('T')[0].split('-');
     return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).toLocaleDateString('pt-BR');
-  };
-
-  const yieldLabel = (item: FixedIncome) => {
-    switch (item.yieldType) {
-      case 'PRE':
-        return `${item.rate}% a.a.`;
-      case 'CDI':
-        return `${item.rate}% do CDI`;
-      case 'SELIC':
-        return `Selic + ${item.rate}%`;
-      case 'IPCA':
-        return `IPCA + ${item.rate}%`;
-      default:
-        return `${item.rate}%`;
-    }
   };
 
   const openCreate = () => {
@@ -116,14 +140,14 @@ export default function FixedIncomePage() {
   };
 
   const openEdit = (item: FixedIncome) => {
-    setEditingId(item.id);
     const firstContrib = item.contributions[0];
+    setEditingId(item.id);
     setForm({
       name: item.name,
-      investmentType: item.investmentType,
+      investmentType: item.investmentType as FixedIncomeType,
       yieldType: item.yieldType,
       rate: String(item.rate),
-      investedAmount: String(item.investedAmount),
+      amount: firstContrib ? String(firstContrib.amount) : '',
       purchaseDate: firstContrib ? firstContrib.date.split('T')[0] : item.createdAt.split('T')[0],
       maturityDate: item.maturityDate.split('T')[0],
       taxExempt: item.taxExempt,
@@ -138,17 +162,19 @@ export default function FixedIncomePage() {
     setFormError('');
     setFormLoading(true);
 
-    const payload = {
-      name: form.name,
+    const payload: Record<string, unknown> = {
+      name: form.name.trim(),
       investmentType: form.investmentType,
       yieldType: form.yieldType,
       rate: Number(form.rate),
-      investedAmount: Number(form.investedAmount),
-      purchaseDate: form.purchaseDate,
       maturityDate: form.maturityDate,
       taxExempt: form.taxExempt,
       notes: form.notes || null,
     };
+
+    if (!editingId) {
+      payload.contributions = [{ amount: Number(form.amount), date: form.purchaseDate }];
+    }
 
     try {
       if (editingId) {
@@ -159,8 +185,11 @@ export default function FixedIncomePage() {
       setShowForm(false);
       setEditingId(null);
       loadData();
-    } catch (err: any) {
-      setFormError(err.response?.data?.error || 'Erro ao salvar investimento');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao salvar investimento';
+      setFormError(message);
     } finally {
       setFormLoading(false);
     }
@@ -171,8 +200,11 @@ export default function FixedIncomePage() {
     try {
       await api.delete(`/fixed-income/${item.id}`);
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao excluir');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao excluir';
+      alert(message);
     }
   };
 
@@ -197,8 +229,11 @@ export default function FixedIncomePage() {
       });
       setSettleItem(null);
       loadData();
-    } catch (err: any) {
-      setSettleError(err.response?.data?.error || 'Erro ao encerrar');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao encerrar';
+      setSettleError(message);
     } finally {
       setSettleLoading(false);
     }
@@ -212,8 +247,11 @@ export default function FixedIncomePage() {
         settledDate: null,
       });
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao reabrir');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao reabrir';
+      alert(message);
     }
   };
 
@@ -260,8 +298,11 @@ export default function FixedIncomePage() {
       setContribTarget(null);
       setContribEditingId(null);
       loadData();
-    } catch (err: any) {
-      setContribError(err.response?.data?.error || 'Erro ao salvar aporte');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao salvar aporte';
+      setContribError(message);
     } finally {
       setContribLoading(false);
     }
@@ -272,15 +313,13 @@ export default function FixedIncomePage() {
     try {
       await api.delete(`/fixed-income/${item.id}/contributions/${contributionId}`);
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao excluir aporte');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao excluir aporte';
+      alert(message);
     }
   };
-
-  const selectedYield = YIELD_TYPES.find((y) => y.value === form.yieldType);
-  const missingRate =
-    form.yieldType !== 'PRE' &&
-    (form.yieldType === 'CDI' ? !currentRates['SELIC'] : !currentRates[form.yieldType]);
 
   const active = items.filter((i) => !i.projection.settled);
   const settled = items.filter((i) => i.projection.settled);
@@ -437,11 +476,11 @@ export default function FixedIncomePage() {
               <label className="block text-sm font-medium text-muted-foreground mb-1">Tipo</label>
               <select
                 value={form.investmentType}
-                onChange={(e) => setForm({ ...form, investmentType: e.target.value })}
+                onChange={(e) => setForm({ ...form, investmentType: e.target.value as FixedIncomeType })}
                 className="w-full border border-border rounded-lg px-3 py-2 text-foreground bg-white focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 {INVESTMENT_TYPES.map((t) => (
-                  <option key={t} value={t}>{t}</option>
+                  <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
               </select>
             </div>
@@ -454,8 +493,8 @@ export default function FixedIncomePage() {
                 type="number"
                 step="0.01"
                 min="0.01"
-                value={form.investedAmount}
-                onChange={(e) => setForm({ ...form, investedAmount: e.target.value })}
+                value={form.amount}
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
                 className="w-full border border-border rounded-lg px-3 py-2 text-foreground bg-white focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
                 required={!editingId}
                 disabled={!!editingId}
@@ -469,7 +508,7 @@ export default function FixedIncomePage() {
               <label className="block text-sm font-medium text-muted-foreground mb-1">Tipo de rendimento</label>
               <select
                 value={form.yieldType}
-                onChange={(e) => setForm({ ...form, yieldType: e.target.value as FixedIncomeYieldType })}
+                onChange={(e) => setForm({ ...form, yieldType: e.target.value as YieldType })}
                 className="w-full border border-border rounded-lg px-3 py-2 text-foreground bg-white focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 {YIELD_TYPES.map((y) => (

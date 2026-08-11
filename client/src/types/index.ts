@@ -110,6 +110,8 @@ export interface FixedIncomeProjection {
 }
 
 export type FixedIncomeYieldType = 'PRE' | 'CDI' | 'SELIC' | 'IPCA';
+export type YieldType = FixedIncomeYieldType;
+export type FixedIncomeType = 'CDB' | 'LCI' | 'LCA' | 'LC' | 'TESOURO' | 'TESOURO_DIRETO' | 'DEBENTURE' | 'CRI' | 'CRA' | 'OUTRO' | 'OUTROS';
 
 export interface FixedIncome {
   id: string;

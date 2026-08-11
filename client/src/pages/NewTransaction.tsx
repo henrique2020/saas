@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { FormEvent, ChangeEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Upload, Download } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -99,7 +100,7 @@ export default function NewTransaction() {
   useEffect(() => {
     api.get('/dashboard/summary')
       .then((res) => {
-        const tickers = (res.data.positions || []).map((p: any) => p.ticker as string);
+        const tickers = (res.data.positions || []).map((p: { ticker: string }) => p.ticker);
         setKnownTickers(tickers);
       })
       .catch(() => {});
@@ -122,8 +123,11 @@ export default function NewTransaction() {
         notes: notes || undefined,
       });
       navigate(initialTicker ? `/stock/${initialTicker}` : '/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao registrar movimentação');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao registrar movimentação';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -147,8 +151,11 @@ export default function NewTransaction() {
       setDivAmountPerShare('');
       setDivComDate('');
       setDivPaymentDate('');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao registrar dividendo');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao registrar dividendo';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -170,8 +177,11 @@ export default function NewTransaction() {
         notes: manualNotes || undefined,
       });
       navigate(initialTicker ? `/stock/${initialTicker}` : '/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao registrar dividendo manual');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao registrar dividendo manual';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -195,8 +205,11 @@ export default function NewTransaction() {
         contributions: [{ amount: Number(fiAmount), date: fiPurchaseDate }],
       });
       navigate('/renda-fixa');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao registrar investimento de renda fixa');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao registrar investimento de renda fixa';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -223,8 +236,11 @@ export default function NewTransaction() {
       setRateValue('');
       setRateStartDate('');
       setRateNotes('');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao registrar taxa');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao registrar taxa';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -254,8 +270,8 @@ export default function NewTransaction() {
       setSuccess(res.data.message);
       setCsvContent('');
       if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      const data = err.response?.data;
+    } catch (err: unknown) {
+      const data = axios.isAxiosError(err) ? err.response?.data : undefined;
       setError(data?.error || 'Erro ao importar CSV');
       if (data?.details) setCsvResult({ message: data.error, errors: data.details });
     } finally {
@@ -276,35 +292,13 @@ export default function NewTransaction() {
       setSuccess(res.data.message);
       setCsvContent('');
       if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      const data = err.response?.data;
+    } catch (err: unknown) {
+      const data = axios.isAxiosError(err) ? err.response?.data : undefined;
       setError(data?.error || 'Erro ao importar CSV de dividendos');
       if (data?.details) setCsvResult({ message: data.error, errors: data.details });
     } finally {
       setLoading(false);
     }
-  };
-
-  const downloadTemplate = () => {
-    const template = 'Ticker;Cotas;Operação;Valor p/ Cota;Data\nPETR4;100;COMPRA;28.50;2025-01-15\nVALE3;50;COMPRA;62.30;2025-02-10\nITUB4;200;VENDA;25.10;2025-03-05\n';
-    const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'modelo_importacao.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const downloadDividendTemplate = () => {
-    const template = 'Ticker;Data-com;Data-pagamento;Tipo;Valor\nPETR4;2025-05-15;2025-06-10;DIVIDENDO;0.50\nVALE3;2025-05-20;2025-06-12;JCP;0.72\nITUB4;2025-05-25;2025-06-14;RENDIMENTO;0.30\n';
-    const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'modelo_importacao_dividendos.csv';
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleFixedIncomeCsvImport = async (e: FormEvent) => {
@@ -320,8 +314,8 @@ export default function NewTransaction() {
       setSuccess(res.data.message);
       setCsvContent('');
       if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      const data = err.response?.data;
+    } catch (err: unknown) {
+      const data = axios.isAxiosError(err) ? err.response?.data : undefined;
       setError(data?.error || 'Erro ao importar CSV de renda fixa');
       if (data?.details) setCsvResult({ message: data.error, errors: data.details });
     } finally {
@@ -342,8 +336,8 @@ export default function NewTransaction() {
       setSuccess(res.data.message);
       setCsvContent('');
       if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      const data = err.response?.data;
+    } catch (err: unknown) {
+      const data = axios.isAxiosError(err) ? err.response?.data : undefined;
       setError(data?.error || 'Erro ao importar CSV de taxas');
       if (data?.details) setCsvResult({ message: data.error, errors: data.details });
     } finally {
@@ -380,6 +374,24 @@ export default function NewTransaction() {
         'IPCA;2025-02-01;1.31;Variacao do mes de fevereiro\n' +
         'IPCA;2025-03-01;-0.02;Deflacao no mes (aceita negativo)\n',
       'modelo_importacao_taxas.csv'
+    );
+  };
+
+  const downloadTemplate = () => {
+    downloadCsv(
+      'Ticker;Cotas;Operação;Valor p/ Cota;Data\n' +
+        'PETR4;100;COMPRA;32.50;2024-01-15\n' +
+        'VALE3;50;VENDA;68.00;2024-02-10\n',
+      'modelo_movimentacoes.csv'
+    );
+  };
+
+  const downloadDividendTemplate = () => {
+    downloadCsv(
+      'Ticker;Data-com;Data-pagamento;Tipo;Valor\n' +
+        'PETR4;2024-01-10;2024-01-25;DIVIDENDO;1.25\n' +
+        'VALE3;2024-02-01;2024-02-20;JCP;0.80\n',
+      'modelo_dividendos.csv'
     );
   };
 

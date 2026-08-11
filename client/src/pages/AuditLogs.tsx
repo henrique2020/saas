@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Shield } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
 
 interface AuditLogEntry {
@@ -23,21 +24,26 @@ export default function AuditLogs() {
 
   useEffect(() => {
     document.title = 'Logs de Auditoria';
-    loadLogs();
+    let isMounted = true;
+    api.get(`/audit-logs?page=${page}&limit=30`)
+      .then(({ data }) => {
+        if (isMounted) {
+          setLogs(data.logs);
+          setTotal(data.total);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (isMounted) {
+          const message = axios.isAxiosError(err) && err.response?.data?.error
+            ? (err.response.data.error as string)
+            : 'Erro ao carregar logs';
+          setError(message);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
   }, [page]);
-
-  const loadLogs = async () => {
-    try {
-      setLoading(true);
-      const { data } = await api.get(`/audit-logs?page=${page}&limit=30`);
-      setLogs(data.logs);
-      setTotal(data.total);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao carregar logs');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);

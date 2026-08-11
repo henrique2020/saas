@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Pencil, Trash2, X, Plus, Lock } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
 
 interface Movement {
@@ -34,19 +35,35 @@ const categoryStyle: Record<string, string> = {
 export default function Movements() {
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Filter states
   const [filter, setFilter] = useState('');
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
-  const [createKind, setCreateKind] = useState<CreateKind>('BUY');
+  const [cMode, setCMode] = useState<'transaction' | 'dividend'>('transaction');
+  const [cType, setCType] = useState<'BUY' | 'SELL'>('BUY');
+  const [createKind, setCreateKindState] = useState<CreateKind>('BUY');
+
+  const setCreateKind = (kind: CreateKind) => {
+    setCreateKindState(kind);
+    if (kind === 'DIVIDEND') {
+      setCMode('dividend');
+    } else {
+      setCMode('transaction');
+      setCType(kind);
+    }
+  };
+
   const [cTicker, setCTicker] = useState('');
+
   const [cQuantity, setCQuantity] = useState('');
   const [cPrice, setCPrice] = useState('');
   const [cFees, setCFees] = useState('');
   const [cDate, setCDate] = useState(new Date().toISOString().split('T')[0]);
   const [cAmount, setCAmount] = useState('');
-  const [cComDate, setCComDate] = useState('');
-  const [cPaymentDate, setCPaymentDate] = useState('');
+  const [cComDate, setCComDate] = useState(new Date().toISOString().split('T')[0]);
+  const [cPaymentDate, setCPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [cDivType, setCDivType] = useState<'DIVIDENDO' | 'JCP' | 'RENDIMENTO'>('DIVIDENDO');
   const [cNotes, setCNotes] = useState('');
   const [saving, setSaving] = useState(false);
@@ -66,11 +83,6 @@ export default function Movements() {
   const [eNotes, setENotes] = useState('');
   const [editSaving, setEditSaving] = useState(false);
 
-  useEffect(() => {
-    document.title = 'Movimentações';
-    loadData();
-  }, []);
-
   const loadData = async () => {
     try {
       const res = await api.get('/dashboard/movements');
@@ -81,6 +93,25 @@ export default function Movements() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    document.title = 'Movimentações';
+    let isMounted = true;
+    api.get('/dashboard/movements')
+      .then((res) => {
+        if (isMounted) {
+          setMovements(res.data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error('Erro ao carregar movimentações:', err);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -94,7 +125,7 @@ export default function Movements() {
     setCTicker(''); setCQuantity(''); setCPrice(''); setCFees('');
     setCDate(new Date().toISOString().split('T')[0]);
     setCAmount(''); setCComDate(''); setCPaymentDate(''); setCNotes('');
-    setCreateKind('BUY'); setCDivType('DIVIDENDO'); setFormError('');
+    setCMode('transaction'); setCType('BUY'); setCDivType('DIVIDENDO'); setCreateKindState('BUY'); setFormError('');
   };
 
   const handleCreate = async (e: FormEvent) => {
@@ -102,9 +133,9 @@ export default function Movements() {
     setSaving(true);
     setFormError('');
     try {
-      if (createKind === 'DIVIDEND') {
+      if (cMode === 'dividend') {
         await api.post('/dividends/manual', {
-          ticker: cTicker,
+          ticker: cTicker.trim().toUpperCase(),
           amount: Number(cAmount),
           comDate: cComDate,
           paymentDate: cPaymentDate,
@@ -113,8 +144,8 @@ export default function Movements() {
         });
       } else {
         await api.post('/transactions', {
-          ticker: cTicker,
-          type: createKind,
+          ticker: cTicker.trim().toUpperCase(),
+          type: cType,
           quantity: Number(cQuantity),
           price: Number(cPrice),
           fees: Number(cFees || 0),
@@ -125,8 +156,11 @@ export default function Movements() {
       setShowCreate(false);
       resetCreate();
       loadData();
-    } catch (err: any) {
-      setFormError(err.response?.data?.error || 'Erro ao registrar movimentação');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao registrar movimentação';
+      setFormError(message);
     } finally {
       setSaving(false);
     }
@@ -174,8 +208,11 @@ export default function Movements() {
       }
       setEditMov(null);
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao editar');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao editar';
+      alert(message);
     } finally {
       setEditSaving(false);
     }
@@ -191,8 +228,11 @@ export default function Movements() {
         await api.delete(`/dividends/manual/${mov.id}`);
       }
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao excluir');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao excluir';
+      alert(message);
     }
   };
 

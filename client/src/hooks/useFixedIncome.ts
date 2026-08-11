@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import axios from 'axios';
 import api from '../services/api';
 import type { FixedIncome, FixedIncomeSummary } from '../types';
 
@@ -10,22 +11,43 @@ export function useFixedIncome() {
 
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
       const response = await api.get<{ items: FixedIncome[]; summary: FixedIncomeSummary }>('/fixed-income');
       setItems(response.data.items);
       setSummary(response.data.summary);
-    } catch (err: any) {
+      setError(null);
+    } catch (err: unknown) {
       console.error('Error fetching fixed income:', err);
-      setError(err.response?.data?.error || 'Erro ao carregar renda fixa');
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao carregar renda fixa';
+      setError(message);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let isMounted = true;
+    api.get<{ items: FixedIncome[]; summary: FixedIncomeSummary }>('/fixed-income')
+      .then((res) => {
+        if (isMounted) {
+          setItems(res.data.items);
+          setSummary(res.data.summary);
+          setError(null);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (isMounted) {
+          const message = axios.isAxiosError(err) && err.response?.data?.error
+            ? (err.response.data.error as string)
+            : 'Erro ao carregar renda fixa';
+          setError(message);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   const deleteInvestment = async (id: string) => {
     await api.delete(`/fixed-income/${id}`);

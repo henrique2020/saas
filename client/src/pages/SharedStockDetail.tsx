@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, TrendingDown, TrendingUp } from 'lucide-react';
 import api from '../services/api';
@@ -16,7 +16,7 @@ interface SharedDetail {
   totalDividends?: number;
   dividendsByYear?: Record<string, number>;
   realizedPnL?: number;
-  transactions?: Array<{ id: string; type: string; quantity: any; price: any; date: string; fees?: any }>;
+  transactions?: Array<{ id: string; type: string; quantity: number; price: number; date: string; fees?: number }>;
   dividends?: Array<{ source: string; ticker: string; totalAmount: number; paymentDate: string; type: string }>;
 }
 
@@ -25,20 +25,21 @@ export default function SharedStockDetail() {
   const [detail, setDetail] = useState<SharedDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!shareId || !ticker) return;
-    document.title = `${ticker.toUpperCase()} (compartilhado)`;
-    loadData();
-  }, [shareId, ticker]);
-
-  const loadData = async () => {
     try {
       const res = await api.get(`/shares/${shareId}/stock/${ticker}`);
       setDetail(res.data);
     } finally {
       setLoading(false);
     }
-  };
+  }, [shareId, ticker]);
+
+  useEffect(() => {
+    if (!shareId || !ticker) return;
+    document.title = `${ticker.toUpperCase()} (compartilhado)`;
+    loadData();
+  }, [shareId, ticker, loadData]);
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);

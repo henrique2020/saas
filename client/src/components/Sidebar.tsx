@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, Home, Archive, TrendingUp, Settings, DollarSign, FileText, RefreshCw, ArrowLeftRight, Landmark, Percent, BarChart3, Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import axios from 'axios';
 import api from '../services/api';
 
 interface SidebarProps {
@@ -49,8 +50,11 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
     try {
       const res = await api.post('/stocks/admin/sync-month');
       setSyncResult(`✓ ${res.data.tickers} tickers, ${res.data.totalBars} barras (${res.data.month})`);
-    } catch (error: any) {
-      setSyncResult(`✗ ${error.response?.data?.error || 'Erro na sincronização'}`);
+    } catch (error: unknown) {
+      const message = axios.isAxiosError(error) && error.response?.data?.error
+        ? (error.response.data.error as string)
+        : 'Erro na sincronização';
+      setSyncResult(`✗ ${message}`);
     } finally {
       setSyncingMonth(false);
     }

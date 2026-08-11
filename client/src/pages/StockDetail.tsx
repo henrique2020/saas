@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
 import { ArrowLeft, Plus, X, Trash2, Pencil, ChevronDown, ChevronUp } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
 import type { StockDetail, Transaction, CalculatedDividend } from '../types';
 import { useTheme } from '../context/ThemeContext';
@@ -60,29 +61,8 @@ export default function StockDetailPage() {
   const [editDivType, setEditDivType] = useState<'DIVIDENDO' | 'JCP' | 'RENDIMENTO'>('DIVIDENDO');
   const [editDivLoading, setEditDivLoading] = useState(false);
 
-  useEffect(() => {
-    if (ticker) loadData();
-  }, [ticker]);
-
-  useEffect(() => {
-    if (ticker) loadEvolution();
-  }, [ticker, evolutionRange]);
-
-  const loadEvolution = async () => {
-    try {
-      const res = await api.get(`/dashboard/stock/${ticker}/evolution?range=${evolutionRange}`);
-      setEvolutionSeries(res.data.series || []);
-    } catch (error) {
-      console.error('Error loading evolution series:', error);
-      setEvolutionSeries([]);
-    }
-  };
-
-  useEffect(() => {
-    if (ticker) document.title = ticker.toUpperCase();
-  }, [ticker]);
-
   const loadData = async () => {
+    if (!ticker) return;
     try {
       const detailRes = await api.get(`/dashboard/stock/${ticker}`);
       setDetail(detailRes.data);
@@ -92,6 +72,49 @@ export default function StockDetailPage() {
       setLoading(false);
     }
   };
+
+
+
+  useEffect(() => {
+    if (!ticker) return;
+    let isMounted = true;
+    api.get(`/dashboard/stock/${ticker}`)
+      .then((detailRes) => {
+        if (isMounted) {
+          setDetail(detailRes.data);
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (isMounted) {
+          console.error('Error loading stock detail:', error);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
+  }, [ticker]);
+
+  useEffect(() => {
+    if (!ticker) return;
+    let isMounted = true;
+    api.get(`/dashboard/stock/${ticker}/evolution?range=${evolutionRange}`)
+      .then((res) => {
+        if (isMounted) {
+          setEvolutionSeries(res.data.series || []);
+        }
+      })
+      .catch((error) => {
+        if (isMounted) {
+          console.error('Error loading evolution series:', error);
+          setEvolutionSeries([]);
+        }
+      });
+    return () => { isMounted = false; };
+  }, [ticker, evolutionRange]);
+
+  useEffect(() => {
+    if (ticker) document.title = ticker.toUpperCase();
+  }, [ticker]);
 
   const handleAddTransaction = async (e: FormEvent) => {
     e.preventDefault();
@@ -114,8 +137,11 @@ export default function StockDetailPage() {
       setTxFees('');
       setTxNotes('');
       loadData();
-    } catch (err: any) {
-      setTxFormError(err.response?.data?.error || 'Erro ao registrar movimentação');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao registrar movimentação';
+      setTxFormError(message);
     } finally {
       setTxFormLoading(false);
     }
@@ -140,8 +166,11 @@ export default function StockDetailPage() {
       setDivComDate('');
       setDivNotes('');
       loadData();
-    } catch (err: any) {
-      setDivFormError(err.response?.data?.error || 'Erro ao registrar dividendo');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao registrar dividendo';
+      setDivFormError(message);
     } finally {
       setDivFormLoading(false);
     }
@@ -163,8 +192,11 @@ export default function StockDetailPage() {
     try {
       await api.delete(`/transactions/${id}`);
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao excluir');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao excluir';
+      alert(message);
     }
   };
 
@@ -178,8 +210,11 @@ export default function StockDetailPage() {
         await api.delete(`/dividends/manual/${div.id}`);
       }
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao excluir');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao excluir';
+      alert(message);
     }
   };
 
@@ -208,8 +243,11 @@ export default function StockDetailPage() {
       });
       setEditTx(null);
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao atualizar');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao atualizar';
+      alert(message);
     } finally {
       setEditTxLoading(false);
     }
@@ -219,7 +257,7 @@ export default function StockDetailPage() {
     setEditDiv(div);
     setEditDivAmount(String(div.amountPerShare || div.totalAmount || '0'));
     setEditDivPaymentDate(div.paymentDate.split('T')[0]);
-    setEditDivType(div.type as any);
+    setEditDivType((div.type as 'DIVIDENDO' | 'JCP' | 'RENDIMENTO') || 'DIVIDENDO');
   };
 
   const handleEditDividend = async (e: FormEvent) => {
@@ -242,8 +280,11 @@ export default function StockDetailPage() {
       }
       setEditDiv(null);
       loadData();
-    } catch (err: any) {
-      alert(err.response?.data?.error || 'Erro ao atualizar dividendo');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao atualizar dividendo';
+      alert(message);
     } finally {
       setEditDivLoading(false);
     }
@@ -318,7 +359,7 @@ export default function StockDetailPage() {
   });
 
   // Prepare dividend chart data
-  const dividendChartData = detail.dividends.reduce((acc: any[], div) => {
+  const dividendChartData = detail.dividends.reduce((acc: Array<{ month: string; amount: number }>, div) => {
     const p = div.paymentDate.split('T')[0].split('-');
     const month = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
     const existing = acc.find(a => a.month === month);
@@ -805,7 +846,7 @@ export default function StockDetailPage() {
                   <label className="block text-sm font-medium mb-1">Tipo</label>
                   <select
                     value={divType}
-                    onChange={(e) => setDivType(e.target.value as any)}
+                    onChange={(e) => setDivType(e.target.value as 'DIVIDENDO' | 'JCP' | 'RENDIMENTO')}
                     className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground"
                   >
                     <option value="DIVIDENDO">Dividendo</option>
@@ -991,7 +1032,7 @@ export default function StockDetailPage() {
                   <label className="block text-sm font-medium mb-1">Tipo</label>
                   <select
                     value={editDivType}
-                    onChange={(e) => setEditDivType(e.target.value as any)}
+                    onChange={(e) => setEditDivType(e.target.value as 'DIVIDENDO' | 'JCP' | 'RENDIMENTO')}
                     className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-background text-foreground"
                   >
                     <option value="DIVIDENDO">Dividendo</option>

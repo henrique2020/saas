@@ -44,21 +44,24 @@ export default function PnLOverview() {
 
   useEffect(() => {
     document.title = 'Lucro/Perda';
-    loadData();
+    let isMounted = true;
+    api.get('/dashboard/pnl-overview')
+      .then((res) => {
+        if (isMounted) {
+          setSummary(res.data.summary);
+          setFixedIncome(res.data.fixedIncome);
+          setByStock(res.data.byStock);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error('Error loading P/L overview:', err);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
   }, []);
-
-  const loadData = async () => {
-    try {
-      const res = await api.get('/dashboard/pnl-overview');
-      setSummary(res.data.summary);
-      setFixedIncome(res.data.fixedIncome);
-      setByStock(res.data.byStock);
-    } catch (error) {
-      console.error('Error loading P/L overview:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);

@@ -2,6 +2,8 @@ import { type FormEvent, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 
+import axios from 'axios';
+
 export default function ShareConfirm() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -18,8 +20,11 @@ export default function ShareConfirm() {
     try {
       const { data } = await api.post('/shares/confirm', { token, code });
       navigate(`/shared/${data.id}`);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao confirmar compartilhamento');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao confirmar compartilhamento';
+      setError(message);
     } finally {
       setLoading(false);
     }

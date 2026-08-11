@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
 import type { SharedDashboardSummary } from '../types';
 
@@ -13,19 +14,25 @@ export default function SharedDashboard() {
   useEffect(() => {
     if (!shareId) return;
     document.title = 'Portfólio compartilhado';
-    loadData();
+    let isMounted = true;
+    api.get(`/shares/${shareId}/summary`)
+      .then((summaryRes) => {
+        if (isMounted) {
+          setSummary(summaryRes.data);
+          setLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (isMounted) {
+          const message = axios.isAxiosError(err) && err.response?.data?.error
+            ? (err.response.data.error as string)
+            : 'Erro ao carregar portfólio compartilhado';
+          setError(message);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
   }, [shareId]);
-
-  const loadData = async () => {
-    try {
-      const summaryRes = await api.get(`/shares/${shareId}/summary`);
-      setSummary(summaryRes.data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao carregar portfólio compartilhado');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { Percent, Plus, X, Trash2, Pencil } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import type { RateIndex } from '../types';
@@ -28,9 +29,27 @@ export default function AdminRates() {
 
   useEffect(() => {
     document.title = 'Taxas de Referência';
-    loadData();
+    let isMounted = true;
+    api.get('/rates')
+      .then((res) => {
+        if (isMounted) {
+          setRates(res.data || []);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error('Error loading rates:', err);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
   }, []);
 
+  const formatDate = (dateStr: string) => {
+    const parts = dateStr.split('T')[0].split('-');
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).toLocaleDateString('pt-BR');
+  };
   const loadData = async () => {
     try {
       const res = await api.get('/rates');
@@ -40,11 +59,6 @@ export default function AdminRates() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatDate = (dateStr: string) => {
-    const parts = dateStr.split('T')[0].split('-');
-    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).toLocaleDateString('pt-BR');
   };
 
   const openCreate = () => {
@@ -58,7 +72,7 @@ export default function AdminRates() {
     setEditingId(rate.id);
     setForm({
       type: rate.type,
-      rate: String(Number(rate.rate)),
+      rate: String(rate.rate),
       startDate: rate.startDate.split('T')[0],
       notes: rate.notes || '',
     });
@@ -85,8 +99,11 @@ export default function AdminRates() {
       setEditingId(null);
       setForm({ ...emptyForm });
       loadData();
-    } catch (err: any) {
-      setFormError(err.response?.data?.error || 'Erro ao salvar taxa');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao salvar taxa';
+      setFormError(message);
     } finally {
       setFormLoading(false);
     }

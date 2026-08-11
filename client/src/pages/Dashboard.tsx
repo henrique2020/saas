@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LabelList } from 'recharts';
 import { TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, Share2, Trash2, Link as LinkIcon, Landmark, Layers, PieChart as PieIcon, ChevronDown } from 'lucide-react';
+import axios from 'axios';
 import api from '../services/api';
-import type { DashboardSummary, ProfileShare, FixedIncome } from '../types';
+import type { DashboardSummary, FixedIncome } from '../types';
 import { useTheme } from '../context/ThemeContext';
 
 const COLORS = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626', '#0891b2', '#4f46e5', '#be185d'];
@@ -36,13 +37,6 @@ type SortField = 'ticker' | 'pt' | 'pnl';
 type SortDir = 'asc' | 'desc';
 type DividendGroupMode = 'day' | 'month' | 'year';
 
-interface GroupedDividend {
-  label: string;
-  received: number;
-  pending: number;
-  total?: number;
-}
-
 /** Chave usada para lembrar quais blocos da home estão expandidos. */
 const SECTIONS_KEY = 'dashboard:sections';
 
@@ -56,36 +50,35 @@ function valueSizeClass(text: string) {
   return 'text-lg sm:text-2xl';
 }
 
-function loadSectionsState(): { rv: boolean; rf: boolean } {
-  try {
-    const raw = localStorage.getItem(SECTIONS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return { rv: parsed.rv !== false, rf: parsed.rf !== false };
-    }
-  } catch {
-    // storage indisponível — usa o padrão expandido
-  }
-  return { rv: true, rf: true };
-}
-
 export default function Dashboard() {
   const { theme } = useTheme();
   const location = useLocation();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [groupedDividends, setGroupedDividends] = useState<Array<{ label: string; received: number; pending: number; total: number }>>([]);
+  const [incomingShares, setIncomingShares] = useState<Array<{ id: string; sender?: { name: string; email: string }; ownerUser?: { name: string; email: string }; status?: string; token?: string }>>([]);
+  const [outgoingShares, setOutgoingShares] = useState<Array<{ id: string; targetEmail?: string; status?: string; targetUser?: { name?: string; email?: string }; authorizedAt?: string; confirmationCode?: string }>>([]);
   const [fixedIncomeItems, setFixedIncomeItems] = useState<FixedIncome[]>([]);
-  const [groupedDividends, setGroupedDividends] = useState<GroupedDividend[]>([]);
-  const [dividendMode, setDividendMode] = useState<DividendGroupMode>('month');
   const [loading, setLoading] = useState(true);
+  const [dividendMode, setDividendMode] = useState<DividendGroupMode>('month');
   const [sortField, setSortField] = useState<SortField>('ticker');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [incomingShares, setIncomingShares] = useState<ProfileShare[]>([]);
-  const [outgoingShares, setOutgoingShares] = useState<ProfileShare[]>([]);
+
+  // Colapso/Expansão dos blocos da dashboard
+  const [sections, setSections] = useState<{ rv: boolean; rf: boolean }>(() => {
+    try {
+      const saved = localStorage.getItem(SECTIONS_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return { rv: true, rf: true };
+  });
+
+  // Modal de compartilhamento
   const [targetEmail, setTargetEmail] = useState('');
   const [shareLoading, setShareLoading] = useState(false);
   const [shareError, setShareError] = useState('');
   const [shareSuccess, setShareSuccess] = useState('');
-  const [sections, setSections] = useState(loadSectionsState);
 
   const toggleSection = (key: 'rv' | 'rf') => setSections((prev) => ({ ...prev, [key]: !prev[key] }));
   const openSection = (key: 'rv' | 'rf') => setSections((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
@@ -93,37 +86,6 @@ export default function Dashboard() {
   useEffect(() => {
     localStorage.setItem(SECTIONS_KEY, JSON.stringify(sections));
   }, [sections]);
-
-  useEffect(() => {
-    document.title = 'Home';
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    loadGroupedDividends();
-  }, [dividendMode]);
-
-  // Navegação por âncora (#renda-variavel / #renda-fixa) vinda do menu lateral.
-  useEffect(() => {
-    if (loading || !location.hash) return;
-    const id = location.hash.slice(1);
-    if (id === 'renda-variavel') openSection('rv');
-    if (id === 'renda-fixa') openSection('rf');
-    // aguarda o bloco expandir antes de rolar até ele
-    const timer = window.setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 60);
-    return () => window.clearTimeout(timer);
-  }, [loading, location.hash, location.key]);
-
-  const loadGroupedDividends = async () => {
-    try {
-      const res = await api.get(`/dashboard/dividends-grouped?mode=${dividendMode}`);
-      setGroupedDividends(res.data);
-    } catch (error) {
-      console.error('Error loading grouped dividends:', error);
-    }
-  };
 
   const loadData = async () => {
     try {
@@ -146,6 +108,47 @@ export default function Dashboard() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    document.title = 'Home';
+    let isMounted = true;
+    Promise.all([
+      api.get('/dashboard/summary'),
+      api.get(`/dashboard/dividends-grouped?mode=${dividendMode}`),
+      api.get('/shares/incoming'),
+      api.get('/shares/outgoing'),
+      api.get('/fixed-income'),
+    ])
+      .then(([summaryRes, dividendsRes, incomingRes, outgoingRes, fixedIncomeRes]) => {
+        if (isMounted) {
+          setSummary(summaryRes.data);
+          setGroupedDividends(dividendsRes.data);
+          setIncomingShares(incomingRes.data);
+          setOutgoingShares(outgoingRes.data);
+          setFixedIncomeItems(fixedIncomeRes.data.items || []);
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (isMounted) {
+          console.error('Error loading dashboard:', error);
+          setLoading(false);
+        }
+      });
+    return () => { isMounted = false; };
+  }, [dividendMode]);
+
+  // Navegação por âncora (#renda-variavel / #renda-fixa) vinda do menu lateral.
+  useEffect(() => {
+    if (loading || !location.hash) return;
+    const id = location.hash.slice(1);
+    const timer = window.setTimeout(() => {
+      if (id === 'renda-variavel') openSection('rv');
+      if (id === 'renda-fixa') openSection('rf');
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [loading, location.hash]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -205,8 +208,11 @@ export default function Dashboard() {
       setTargetEmail('');
       setShareSuccess(`Link gerado: ${data.confirmLink}`);
       await loadData();
-    } catch (err: any) {
-      setShareError(err.response?.data?.error || 'Erro ao compartilhar perfil');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao compartilhar perfil';
+      setShareError(message);
     } finally {
       setShareLoading(false);
     }
@@ -216,8 +222,11 @@ export default function Dashboard() {
     try {
       await api.delete(`/shares/${id}`);
       await loadData();
-    } catch (err: any) {
-      setShareError(err.response?.data?.error || 'Erro ao remover compartilhamento');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err) && err.response?.data?.error
+        ? (err.response.data.error as string)
+        : 'Erro ao remover compartilhamento';
+      setShareError(message);
     }
   };
 
@@ -276,8 +285,9 @@ export default function Dashboard() {
     color: theme === 'dark' ? '#f1f5f9' : '#0a0a0a',
   };
 
-  const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
-    if ((percent ?? 0) < 0.06) return null;
+  const renderPieLabel = (props: { cx?: number; cy?: number; midAngle?: number; innerRadius?: number; outerRadius?: number; percent?: number }) => {
+    const { cx = 0, cy = 0, midAngle = 0, innerRadius = 0, outerRadius = 0, percent = 0 } = props;
+    if (percent < 0.06) return null;
     const RADIAN = Math.PI / 180;
     const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -297,8 +307,12 @@ export default function Dashboard() {
     );
   };
 
-  const renderTotalLabel = (props: any) => {
-    const { x, y, width, payload, index } = props;
+  const renderTotalLabel = (props: { x?: number | string; y?: number | string; width?: number | string; payload?: { total?: number; received?: number; pending?: number }; index?: number }) => {
+    const x = Number(props.x || 0);
+    const y = Number(props.y || 0);
+    const width = Number(props.width || 0);
+    const payload = props.payload;
+    const index = typeof props.index === 'number' ? props.index : null;
     const item = payload || (index != null ? groupedDividends[index] : null);
     if (!item) return null;
 
@@ -560,7 +574,7 @@ export default function Dashboard() {
                     <Tooltip
                       contentStyle={chartTooltipStyle}
                       labelStyle={{ color: theme === 'dark' ? '#94a3b8' : '#64748b' }}
-                      formatter={(value: any, name: any) => {
+                      formatter={(value: unknown, name: unknown) => {
                         if (name === 'total') return [null, null];
                         return [
                           formatCurrency(Number(value)),
@@ -586,7 +600,7 @@ export default function Dashboard() {
                     </Line>
                   </ComposedChart>
                 </ResponsiveContainer>
-                </div>
+              </div>
               ) : (
                 <div className="h-56 sm:h-64 flex items-center justify-center text-muted-foreground">Sem dados de dividendos</div>
               )}
@@ -856,4 +870,4 @@ export default function Dashboard() {
         </div>
       </main>
     );
-  }
+}
