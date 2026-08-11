@@ -48,9 +48,38 @@ export default function PnLOverview() {
     api.get('/dashboard/pnl-overview')
       .then((res) => {
         if (isMounted) {
-          setSummary(res.data.summary);
-          setFixedIncome(res.data.fixedIncome);
-          setByStock(res.data.byStock);
+          const sumData = res.data.summary;
+          const fiData = res.data.fixedIncome || res.data.fixedIncomeSummary;
+          const rawStocks = res.data.byStock || res.data.stocks || [];
+
+          setSummary(sumData ? {
+            unrealizedPnL: sumData.unrealizedPnL || 0,
+            realizedPnL: sumData.realizedPnL || 0,
+            totalDividends: sumData.totalDividends || 0,
+            totalResult: sumData.totalResult ?? sumData.totalPnL ?? 0,
+          } : null);
+
+          setFixedIncome(fiData ? {
+            invested: fiData.invested || 0,
+            currentValue: fiData.currentValue || 0,
+            unrealizedPnL: fiData.unrealizedPnL ?? fiData.netProfit ?? 0,
+            realizedPnL: fiData.realizedPnL || 0,
+            projectedProfit: fiData.projectedProfit || 0,
+            settledTotal: fiData.settledTotal || 0,
+            activeCount: fiData.activeCount || 0,
+            totalResult: fiData.totalResult ?? fiData.netProfit ?? 0,
+          } : null);
+
+          setByStock(Array.isArray(rawStocks) ? rawStocks.map((s: { ticker: string; name: string; category: string; isOpen?: boolean; hasActivePosition?: boolean; unrealizedPnL?: number; realizedPnL?: number; dividends?: number; totalDividends?: number; totalResult?: number; totalPnL?: number }) => ({
+            ticker: s.ticker,
+            name: s.name,
+            category: s.category,
+            isOpen: s.isOpen ?? s.hasActivePosition ?? true,
+            unrealizedPnL: s.unrealizedPnL || 0,
+            realizedPnL: s.realizedPnL || 0,
+            dividends: s.dividends ?? s.totalDividends ?? 0,
+            totalResult: s.totalResult ?? s.totalPnL ?? 0,
+          })) : []);
           setLoading(false);
         }
       })
@@ -64,10 +93,10 @@ export default function PnLOverview() {
   }, []);
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
-  const openPositions = byStock.filter((s) => s.isOpen);
-  const closedPositions = byStock.filter((s) => !s.isOpen);
+  const openPositions = (byStock || []).filter((s) => s.isOpen);
+  const closedPositions = (byStock || []).filter((s) => !s.isOpen);
 
   const renderStockTable = (
     title: string,

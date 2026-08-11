@@ -6,12 +6,14 @@ interface ClosedPosition {
   name: string;
   market: string;
   category: string;
-  totalBought: number;
-  totalSold: number;
+  totalBought?: number;
+  totalSold?: number;
   realizedPnL: number;
   totalDividends: number;
-  firstDate: string;
-  lastDate: string;
+  firstDate?: string;
+  firstBuyDate?: string;
+  lastDate?: string;
+  closedDate?: string;
 }
 
 export default function ClosedPositions() {
@@ -24,7 +26,7 @@ export default function ClosedPositions() {
     api.get('/dashboard/closed-positions')
       .then((res) => {
         if (isMounted) {
-          setPositions(res.data);
+          setPositions(Array.isArray(res.data) ? res.data : []);
           setLoading(false);
         }
       })
@@ -37,8 +39,8 @@ export default function ClosedPositions() {
     return () => { isMounted = false; };
   }, []);
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  const formatCurrency = (value: number | undefined) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Carregando...</div>;
@@ -60,12 +62,15 @@ export default function ClosedPositions() {
                 <th className="text-right px-4 sm:px-6 py-3 text-sm font-medium text-muted-foreground">Total Comprado</th>
                 <th className="text-right px-4 sm:px-6 py-3 text-sm font-medium text-muted-foreground">Total Vendido</th>
                 <th className="text-right px-4 sm:px-6 py-3 text-sm font-medium text-muted-foreground">P/L Realizado</th>
-                  <th className="text-right px-4 sm:px-6 py-3 text-sm font-medium text-muted-foreground">Dividendos</th>
-                  <th className="text-right px-4 sm:px-6 py-3 text-sm font-medium text-muted-foreground">Período</th>
-                </tr>
-              </thead>
-              <tbody>
-                {positions.map((pos) => (
+                <th className="text-right px-4 sm:px-6 py-3 text-sm font-medium text-muted-foreground">Dividendos</th>
+                <th className="text-right px-4 sm:px-6 py-3 text-sm font-medium text-muted-foreground">Período</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((pos) => {
+                const startDate = (pos.firstDate || pos.firstBuyDate || '').split('T')[0];
+                const endDate = (pos.lastDate || pos.closedDate || '').split('T')[0];
+                return (
                   <tr key={pos.ticker} className="border-b border-border hover:bg-muted transition">
                     <td className="px-4 sm:px-6 py-4">
                       <div className="font-medium text-foreground">{pos.ticker}</div>
@@ -78,14 +83,15 @@ export default function ClosedPositions() {
                     </td>
                     <td className="text-right px-4 sm:px-6 py-4 text-sm text-green-600 whitespace-nowrap">{formatCurrency(pos.totalDividends)}</td>
                     <td className="text-right px-4 sm:px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
-                      {pos.firstDate.split('T')[0]} — {pos.lastDate.split('T')[0]}
+                      {startDate && endDate ? `${startDate} — ${endDate}` : startDate || endDate || '-'}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </main>
-    );
-  }
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </main>
+  );
+}

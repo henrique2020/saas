@@ -207,12 +207,28 @@ export async function getPnLOverview(req: AuthRequest, res: Response): Promise<v
 
     const fixedIncome = await getFixedIncomeSummaryForUser(userId);
 
+    const totalResult = grandUnrealized + grandRealized + grandDividends;
+
+    const byStock = rows.map((r) => ({
+      stockId: r.stockId,
+      ticker: r.ticker,
+      name: r.name,
+      category: r.category,
+      market: r.market,
+      isOpen: r.hasActivePosition,
+      unrealizedPnL: r.unrealizedPnL,
+      realizedPnL: r.realizedPnL,
+      dividends: r.totalDividends,
+      totalResult: r.totalPnL,
+    }));
+
     res.json({
       summary: {
         unrealizedPnL: grandUnrealized,
         realizedPnL: grandRealized,
         totalDividends: grandDividends,
-        totalPnL: grandUnrealized + grandRealized + grandDividends,
+        totalPnL: totalResult,
+        totalResult,
       },
       fixedIncomeSummary: {
         invested: fixedIncome.invested,
@@ -220,7 +236,18 @@ export async function getPnLOverview(req: AuthRequest, res: Response): Promise<v
         netProfit: fixedIncome.netProfit,
         activeCount: fixedIncome.activeCount,
       },
+      fixedIncome: {
+        invested: fixedIncome.invested,
+        currentValue: fixedIncome.currentValue,
+        unrealizedPnL: fixedIncome.netProfit,
+        realizedPnL: 0,
+        projectedProfit: fixedIncome.projectedProfit || 0,
+        settledTotal: 0,
+        activeCount: fixedIncome.activeCount,
+        totalResult: fixedIncome.netProfit,
+      },
       stocks: rows,
+      byStock,
     });
   } catch (error) {
     console.error('Get PnL overview error:', error);

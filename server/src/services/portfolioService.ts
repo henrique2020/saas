@@ -183,6 +183,8 @@ export async function getClosedPositionsForUser(userId: number) {
 
     let quantity = 0;
     let totalInvested = 0;
+    let totalBought = 0;
+    let totalSold = 0;
     let realizedPnL = 0;
     let firstBuyDate: Date | null = null;
     let lastSellDate: Date | null = null;
@@ -195,11 +197,13 @@ export async function getClosedPositionsForUser(userId: number) {
 
       if (tx.type === 'BUY') {
         if (!firstBuyDate) firstBuyDate = tx.date;
+        totalBought += qty * price + fees;
         totalInvested += qty * price + fees;
         quantity += qty;
         hadPosition = true;
       } else if (tx.type === 'SELL') {
         lastSellDate = tx.date;
+        totalSold += qty * price - fees;
         if (quantity > 0) {
           const avgPrice = totalInvested / quantity;
           const costOfSold = qty * avgPrice;
@@ -216,17 +220,24 @@ export async function getClosedPositionsForUser(userId: number) {
       const stockDividends = allDividends.filter((d) => d.ticker === stock.ticker);
       const totalDividends = stockDividends.reduce((sum, d) => sum + d.totalAmount, 0);
 
+      const fDate = firstBuyDate ? firstBuyDate.toISOString() : '';
+      const lDate = lastSellDate ? lastSellDate.toISOString() : '';
+
       closedPositions.push({
         stockId: stock.id,
         ticker: stock.ticker,
         name: stock.name,
         category: stock.category,
         market: stock.market,
+        totalBought,
+        totalSold,
         realizedPnL,
         totalDividends,
         totalPnL: realizedPnL + totalDividends,
-        firstBuyDate: firstBuyDate ? firstBuyDate.toISOString() : null,
-        closedDate: lastSellDate ? lastSellDate.toISOString() : null,
+        firstBuyDate: fDate,
+        firstDate: fDate,
+        closedDate: lDate,
+        lastDate: lDate,
       });
     }
   }
