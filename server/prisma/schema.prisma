@@ -1,0 +1,231 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String        @db.VarChar(100)
+  email        String        @unique @db.VarChar(255)
+  role         String        @default("USER") @db.VarChar(20)
+  passwordHash String        @map("password_hash") @db.VarChar(255)
+  tokenVersion Int           @default(1) @map("token_version")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  portfolios    Portfolio[]
+  transactions  Transaction[]
+  userDividends UserDividend[]
+  fixedIncomes  FixedIncome[]
+  outgoingShares ProfileShare[] @relation("ProfileShareOwner")
+  incomingShares ProfileShare[] @relation("ProfileShareTarget")
+
+  @@map("users")
+}
+
+model Portfolio {
+  id           Int           @id @default(autoincrement())
+  userId       Int           @map("user_id")
+  name         String        @db.VarChar(100)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("portfolios")
+}
+
+model Stock {
+  id             Int              @id @default(autoincrement())
+  ticker         String           @unique @db.VarChar(20)
+  name           String           @db.VarChar(200)
+  market         String           @db.VarChar(5) // BR or US
+  category       String           @default("ACAO") @db.VarChar(10) // ACAO, FII, ETF, BDR
+  sector         String?          @db.VarChar(100)
+  transactions   Transaction[]
+  userDividends  UserDividend[]
+  stockDividends StockDividend[]
+  prices         StockPrice[]
+
+  @@map("stocks")
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String   @db.VarChar(100)
+  entity    String   @db.VarChar(50)
+  entityId  String?  @map("entity_id") @db.VarChar(50)
+  details   String?  @db.Text
+  ip        String?  @db.VarChar(45)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model RouteLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  method    String   @db.VarChar(10)
+  path      String   @db.VarChar(255)
+  status    Int
+  duration  Int
+  ip        String?  @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("route_logs")
+}
+
+model Transaction {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  userId      Int       @map("user_id")
+  portfolioId Int       @map("portfolio_id")
+  stockId     Int       @map("stock_id")
+  type        String    @db.VarChar(10) // BUY or SELL
+  quantity    Decimal   @db.Decimal(15, 6)
+  price       Decimal   @db.Decimal(15, 2)
+  fees        Decimal   @default(0) @db.Decimal(15, 2)
+  date        DateTime  @db.Date
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  stock       Stock     @relation(fields: [stockId], references: [id])
+
+  @@index([userId, stockId])
+  @@index([userId, date])
+  @@map("transactions")
+}
+
+// Tabela central: dividendos por cota (vale para todos os usuários)
+model StockDividend {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  stockId     Int      @map("stock_id")
+  amountPerShare Decimal @map("amount_per_share") @db.Decimal(15, 4)
+  comDate     DateTime @map("com_date") @db.Date
+  paymentDate DateTime @map("payment_date") @db.Date
+  type        String   @db.VarChar(20) // DIVIDENDO, JCP, RENDIMENTO
+  createdAt   DateTime @default(now()) @map("created_at")
+  stock       Stock    @relation(fields: [stockId], references: [id])
+
+  @@index([stockId, paymentDate])
+  @@map("stock_dividends")
+}
+
+// Dividendos manuais do usuário (conta apenas para ele)
+model UserDividend {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  userId      Int      @map("user_id")
+  stockId     Int      @map("stock_id")
+  amount      Decimal  @db.Decimal(15, 2)
+  comDate     DateTime @map("com_date") @db.Date
+  paymentDate DateTime @map("payment_date") @db.Date
+  type        String   @db.VarChar(20) // DIVIDENDO, JCP, RENDIMENTO
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stock       Stock    @relation(fields: [stockId], references: [id])
+
+  @@map("user_dividends")
+}
+
+
+model StockPrice {
+  id      Int      @id @default(autoincrement())
+  stockId Int      @map("stock_id")
+  date    DateTime @db.Date
+  open    Decimal  @db.Decimal(15, 2)
+  high    Decimal  @db.Decimal(15, 2)
+  low     Decimal  @db.Decimal(15, 2)
+  close   Decimal  @db.Decimal(15, 2)
+  volume  BigInt   @default(0)
+  stock   Stock    @relation(fields: [stockId], references: [id])
+
+  @@unique([stockId, date])
+  @@map("stock_prices")
+}
+
+model ProfileShare {
+  id               String   @id @default(uuid()) @db.VarChar(36)
+  ownerUserId      Int      @map("owner_user_id")
+  targetUserId     Int      @map("target_user_id")
+  token            String   @unique @db.VarChar(80)
+  confirmationCode String   @map("confirmation_code") @db.VarChar(6)
+  status           String   @default("PENDING") @db.VarChar(20) // PENDING, AUTHORIZED, REVOKED, EXPIRED
+  expiresAt        DateTime @map("expires_at")
+  authorizedAt     DateTime? @map("authorized_at")
+  revokedAt        DateTime? @map("revoked_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  ownerUser        User     @relation("ProfileShareOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  targetUser       User     @relation("ProfileShareTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@index([ownerUserId, status])
+  @@index([targetUserId, status])
+  @@map("profile_shares")
+}
+
+// Taxas de referência cadastradas por administradores (SELIC, IPCA).
+// `rate` é o percentual ao ano vigente a partir de `startDate`.
+// O CDI não é cadastrado: é sempre derivado como Selic - 0,10 p.p.
+model RateIndex {
+  id        Int      @id @default(autoincrement())
+  type      String   @db.VarChar(10) // SELIC, IPCA
+  rate      Decimal  @db.Decimal(9, 2)
+  startDate DateTime @map("start_date") @db.Date
+  notes     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([type, startDate])
+  @@index([type, startDate])
+  @@map("rate_indexes")
+}
+
+// Investimentos de renda fixa do usuário.
+// Significado de `rate` conforme `yieldType`:
+//   PRE   -> taxa prefixada ao ano (ex.: 11.5 = 11,5% a.a.)
+//   CDI   -> percentual do CDI (ex.: 110 = 110% do CDI)
+//   SELIC -> spread somado à Selic ao ano (ex.: 0.5 = Selic + 0,5%)
+//   IPCA  -> spread somado ao IPCA ao ano (ex.: 6 = IPCA + 6%)
+model FixedIncome {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  userId         Int       @map("user_id")
+  name           String    @db.VarChar(120)
+  investmentType String    @map("investment_type") @db.VarChar(20) // CDB, LCI, LCA, LC, TESOURO, DEBENTURE, CRI, CRA, OUTRO
+  yieldType      String    @map("yield_type") @db.VarChar(10) // PRE, CDI, SELIC, IPCA
+  rate           Decimal   @db.Decimal(9, 4)
+  maturityDate   DateTime  @map("maturity_date") @db.Date
+  taxExempt      Boolean   @default(false) @map("tax_exempt")
+  settledAmount  Decimal?  @map("settled_amount") @db.Decimal(15, 2)
+  settledDate    DateTime? @map("settled_date") @db.Date
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions  FixedIncomeContribution[]
+
+  @@index([userId])
+  @@index([userId, maturityDate])
+  @@map("fixed_incomes")
+}
+
+// Aportes de um investimento de renda fixa. Cada aporte capitaliza a partir da
+// sua própria data e tem o IR calculado pelo seu prazo individual.
+model FixedIncomeContribution {
+  id            String      @id @default(uuid()) @db.VarChar(36)
+  fixedIncomeId String      @map("fixed_income_id") @db.VarChar(36)
+  amount        Decimal     @db.Decimal(15, 2)
+  date          DateTime    @db.Date
+  notes         String?     @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at")
+  fixedIncome   FixedIncome @relation(fields: [fixedIncomeId], references: [id], onDelete: Cascade)
+
+  @@index([fixedIncomeId, date])
+  @@map("fixed_income_contributions")
+}

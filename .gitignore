@@ -1,0 +1,16 @@
+# Arquivos
+.env
+.env.local
+*.log
+*.sql
+*.txt
+
+# Pastas
+node_modules/
+dist/
+
+
+# Configurações do Agente
+AGENTS.md
+.github/
+
