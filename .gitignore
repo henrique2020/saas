@@ -8,7 +8,7 @@
 # Pastas
 node_modules/
 dist/
-
+docs/changes/
 
 # Configurações do Agente
 AGENTS.md

@@ -142,7 +142,6 @@ Ambos utilizam Alpha Vantage como fonte primária e Yahoo Finance como fallback 
 - `docs/04-logs-e-auditoria.md` — Log de acesso a rotas (`routes.log` e DB) e auditoria de ações
 - `docs/05-rotas-e-middlewares.md` — Mapeamento completo de todas as rotas da API REST e cadeia de middlewares
 - `docs/06-build-dev-producao.md` — Guia de compilação, execução em desenvolvimento e implantação em produção (PM2 + Nginx)
-- `mudancas.txt` — Histórico detalhado de alterações de código e banco de dados
 
 ## Disclaimer
 
